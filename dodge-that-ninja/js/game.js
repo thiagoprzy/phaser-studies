@@ -3,7 +3,7 @@ var game = new Phaser.Game(1280, 720, Phaser.AUTO, 'game', { preload: preload, c
 function preload() {
 
 	//Load tilemap
-	game.load.tilemap('tile', 'assets/tile.json', null, Phaser.Tilemap.TILED_JSON);
+	game.load.tilemap('tilemap', 'assets/tile.json', null, Phaser.Tilemap.TILED_JSON);
 	
 	//Load images
     game.load.spritesheet('star', 'assets/shuriken.png',60,60);
@@ -11,7 +11,7 @@ function preload() {
 	//game.load.image('ship', 'assets/games/invaders/player.png');
 	game.load.spritesheet('ninja', 'assets/ninja.png', 150, 200);
     game.load.image('background', 'assets/jpn_bg.png');
-	game.load.image('floor', 'assets/ground.png');
+	game.load.image('ground', 'assets/ground.png');
 	game.load.image('gameover', 'assets/gameover.png');
 
 	 // Load sounds
@@ -25,6 +25,7 @@ function preload() {
 }
 
 var map;
+var layer;
 var player;
 var stars;
 var item;
@@ -37,7 +38,6 @@ var hasForceField;
 var hasAttack;
 var jumpButton;
 var buttonDown;
-var jumpTimer = 0;
 var background;
 var gameover;
 var score = 0;
@@ -63,11 +63,15 @@ function create() {
 
     game.physics.startSystem(Phaser.Physics.ARCADE);
 	game.physics.arcade.gravity.y = 2000;
-
-	map = game.add.tilemap('tile');
-    map.addTilesetImage('floor');
-
-    background = game.add.tileSprite(0, 0, 1280, 720, 'background');
+	game.physics.arcade.TILE_BIAS = 40;
+	
+	background = game.add.tileSprite(0, 0, 1280, 720, 'background');
+	
+	map = game.add.tilemap('tilemap'); // Preloaded tilemap
+	map.addTilesetImage('ground'); // Preloaded tileset
+	layer = map.createLayer('tile');
+	layer.resizeWorld();
+	map.setCollision([1]); 
 	
 	gameover = game.add.sprite(349, 307, 'gameover');
 	gameover.visible = false;
@@ -82,7 +86,7 @@ function create() {
     enemyStars.setAll('checkWorldBounds', true);
 
 	// The ninja
-	player = game.add.sprite(30, 300, 'ninja');
+	player = game.add.sprite(30, 410, 'ninja');
     game.physics.enable(player, Phaser.Physics.ARCADE);
 	player.enableBody = true;
     player.body.collideWorldBounds = true;
@@ -107,9 +111,10 @@ function create() {
 	stateText2 = game.add.text(559, 423,' ', { font: '34px Arial', fill: '#cdbe35' });
     stateText = game.add.text(stateText2.x -2, stateText2.y -2,' ', { font: '34px Arial', fill: '#f2e438' });
 	
-    //  Jump button. Today is only SPACEBAR. TODO: accept mouse click/tap
-    jumpButton = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
-    jumpButton.onUp.add(function(){ buttonDown = false; },this);
+    //  Jump button
+    //jumpButton = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+    //jumpButton.onUp.add(function(){ buttonDown = false; },this);
+	game.input.onTap.add(function(){ if (player.body.onFloor() || !doubleJump) buttonDown = true; },this);
 	
 	// Configure sound effects    
 	jumpSounds = [ game.add.audio('jump1'), game.add.audio('jump2'), game.add.audio('jump3'), game.add.audio('jump4')];
@@ -128,10 +133,13 @@ function createEnemies () {
 		enemy.body.moves = false;
     }
 
-    enemies.y = 440;
+    enemies.y = 380;
 }
 
 function update() {
+
+	//Check if player is on floor
+	game.physics.arcade.collide(player, layer);
 
     if (player.alive)
     {	
@@ -165,22 +173,20 @@ function update() {
 function checkJump(){
 
 	//Check the normal jump. 
-	if (jumpButton.isDown && player.body.onFloor() && game.time.now > jumpTimer)
+	if (buttonDown && player.body.onFloor())
 	{
 		playJump();
-		buttonDown = true;
+		buttonDown = false
 		player.body.velocity.y = -1020;
-		jumpTimer = game.time.now + 750;
 	}
 	//Check the double jump.
-	else if(jumpButton.isDown && !player.body.onFloor() && !buttonDown && !doubleJump)  
+	else if(buttonDown && !player.body.onFloor() && !doubleJump)  
 	{
 		playJump();
 		player.play('jump');	
-		buttonDown = true;
+		buttonDown = false;
 		doubleJump = true;
 		player.body.velocity.y = -920;
-		jumpTimer = game.time.now + 1500;
 	}
 	//change player sprite movement after reach the floor
 	if(player.body.onFloor())
@@ -199,9 +205,9 @@ function playJump(){
 
 function render() {
 	//only for debug matters
-	 //game.debug.text(game.time.physicsElapsed);
-     //game.debug.body(player);
-     //game.debug.bodyInfo(player);
+	//game.debug.text(game.time.physicsElapsed);
+    //game.debug.body(player);
+    //game.debug.bodyInfo(player);
 
 }
 
@@ -375,7 +381,7 @@ function restart () {
 
     //revives the player
     player.revive();
-	player.reset(30, 400);
+	player.reset(30, 410);
 	
     //hides the text
     stateText.visible = false;
