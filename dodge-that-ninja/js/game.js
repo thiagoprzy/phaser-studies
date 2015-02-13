@@ -9,10 +9,12 @@ function preload() {
     game.load.spritesheet('star', 'assets/shuriken.png',60,60);
     game.load.image('enemy', 'assets/blank.png');
 	//game.load.image('ship', 'assets/games/invaders/player.png');
-	game.load.spritesheet('ninja', 'assets/ninja.png', 150, 200);
+	game.load.spritesheet('ninja', 'assets/ninja.png?v=1', 150, 200);
+	game.load.spritesheet('shadow', 'assets/shadow.png?v=1', 150, 35);
+	game.load.spritesheet('starShadow', 'assets/starShadow.png', 55, 12);
     game.load.image('background', 'assets/jpn_bg.png');
 	game.load.image('ground', 'assets/ground.png');
-	game.load.image('gameover', 'assets/gameover.png');
+	game.load.image('gameover', 'assets/gameover.png?v=1');
 
 	 // Load sounds
     game.load.audio('jump1', 'assets/audio/jump1.mp3');
@@ -27,6 +29,7 @@ function preload() {
 var map;
 var layer;
 var player;
+var shadow;
 var stars;
 var item;
 var itemNumber = -1;
@@ -37,6 +40,9 @@ var hasArmor;
 var hasForceField;
 var hasAttack;
 var jumpButton;
+var jumpPreparation = null;
+var jumping = false;
+var tumble = null;
 var buttonDown;
 var background;
 var gameover;
@@ -45,6 +51,7 @@ var scoreString = '';
 var scoreString2 = '';
 var scoreText;
 var enemyStar;
+var enemyStarsShadow;
 var firingTimer = 0;
 var powerTimer = 0;
 var stateText;
@@ -84,17 +91,35 @@ function create() {
     enemyStars.setAll('anchor.x', 0.5);
     enemyStars.setAll('anchor.y', 0.5);
     enemyStars.setAll('checkWorldBounds', true);
-
+	
+	// The enemy's stars' shadow
+    enemyStarsShadow = game.add.group();
+    enemyStarsShadow.enableBody = true;
+    enemyStarsShadow.createMultiple(4, 'starShadow');
+    enemyStarsShadow.setAll('anchor.x', 0.5);
+    enemyStarsShadow.setAll('anchor.y', 0.5);
+    enemyStarsShadow.setAll('checkWorldBounds', true);
+	enemyStarsShadow.setAll('outOfBoundsKill', true);
+	
+	// The ninja's shadow
+	shadow = game.add.sprite(30, 640, 'shadow');
+	shadow.enableBody = false;
+    shadow.animations.add('shadow1', [0], 7, false);
+	shadow.animations.add('shadow2', [0,1,2], 20, false);
+	shadow.animations.add('shadow3', [2,1,0], 20, false);
+	shadow.play('shadow1');	
+	
 	// The ninja
 	player = game.add.sprite(30, 410, 'ninja');
     game.physics.enable(player, Phaser.Physics.ARCADE);
 	player.enableBody = true;
     player.body.collideWorldBounds = true;
     player.animations.add('ready', [0,1,2,1], 7, true);
-	player.animations.add('jump', [2,3,4,5,6], 7, false);
-	player.animations.add('fall', [5,4,3,2], 7, false);
+	player.animations.add('prepareJump', [2,3], 20, false);
+	player.animations.add('jump', [4,5,6], 7, false);
+	player.animations.add('fall', [5,4,3,2], 20, false);
 	player.body.setSize(72, 175, 52, 25);
-	
+
     //  The stars' launchers
     enemies = game.add.group();
     enemies.enableBody = true;
@@ -177,24 +202,35 @@ function checkJump(){
 	{
 		playJump();
 		buttonDown = false
-		player.body.velocity.y = -1020;
+		jumpPreparation = player.play('prepareJump');
 	}
 	//Check the double jump.
 	else if(buttonDown && !player.body.onFloor() && !doubleJump)  
 	{
 		playJump();
-		player.play('jump');	
 		buttonDown = false;
 		doubleJump = true;
 		player.body.velocity.y = -920;
 	}
-	//change player sprite movement after reach the floor
+	
 	if(player.body.onFloor())
 	{
 		doubleJump = false;
-		player.play('ready');
-	}else if(!doubleJump){
-		player.play('jump');	
+		if(jumping){
+			shadow.play('shadow3');
+			tumble = player.play('fall');
+			jumping = false;		
+		}else if (jumpPreparation != null && jumpPreparation.isFinished){
+			player.body.velocity.y = -1020;
+			player.play('jump');
+			shadow.play('shadow2');	
+			jumping = true;
+			jumpPreparation = null;
+		}else if(jumpPreparation == null && (tumble == null || tumble.isFinished)){
+			shadow.play('shadow1');	
+			player.play('ready');
+			tumble = null;
+		}
 	}
 }
 
@@ -224,6 +260,7 @@ function enemyHitsPlayer (player,star) {
 		player.kill();
 		star.kill();
 		enemyStars.callAll('kill');
+		enemyStarsShadow.callAll('kill');
 		seOuch.play();
 		seLaunch.stop();
 		seSpin.stop();
@@ -324,13 +361,27 @@ function throwObj(obj){
 		}		
 	}while(inaRow >= 2);
 	
+	var starShadow = enemyStarsShadow.getFirstExists(false);
+	if(random == 0)
+	{
+		starShadow.frame = 1;
+	}else{
+		starShadow.frame = 0;
+	}
+	
 	tempRandom = random;
 	// randomly select one of them
    	var shooter=livingEnemies[random];
    	// And fire the star from this enemy
+	var speed = -(game.rnd.integerInRange((400 + (5*score)),600 + (5*score)));
    	obj.reset(shooter.body.x, shooter.body.y+25);
 	obj.body.allowGravity = false;
-	obj.body.velocity.x = -(game.rnd.integerInRange((400 + (5*score)),600 + (5*score)));
+	obj.body.velocity.x = speed;
+	
+	starShadow.reset(shooter.body.x, shadow.y+18);
+	starShadow.body.allowGravity = false;
+	starShadow.body.velocity.x = speed;
+	
     firingTimer = game.time.now + (game.rnd.integerInRange(800 - (5*score),1000 - (5*score)));
 }
 
